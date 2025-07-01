@@ -3,6 +3,7 @@ import logging
 
 import pytest
 
+from eventsourcing.config import ESConfig
 from eventsourcing.interfaces import Message
 from eventsourcing.processor import OutboxProcessor
 from eventsourcing.pubsub.in_memory import InMemoryPubSub
@@ -48,7 +49,9 @@ async def test_outbox_and_processor_logging(caplog):
     # subscribe to the default stream
     _ = await broker.subscribe("s2")
 
-    proc = OutboxProcessor(es, ob, broker, dead_stream="dead")
+    stop = asyncio.Event()
+    cfg = ESConfig(publisher=broker, subscriber=broker, dead_stream="dead")
+    proc = OutboxProcessor(es, ob, broker, cfg, stop)
     task = asyncio.create_task(proc.run())
 
     # enqueue one message

@@ -6,6 +6,8 @@ readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
     "pydantic>=2.11.7",
+    "fastapi>=0.115.14",
+    "uvicorn>=0.35.0",
 ]
 
 [dependency-groups]
@@ -15,7 +17,6 @@ dev = [
     "mypy>=1.16.1",
     "poethepoet>=0.35.0",
     "ruff>=0.12.1",
-    "fastapi>=0.115.14",
     "httpx>=0.28.1",
 ]
 

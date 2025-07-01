@@ -2,6 +2,7 @@ import asyncio
 
 import pytest
 
+from eventsourcing.config import ESConfig
 from eventsourcing.interfaces import Message
 from eventsourcing.processor import OutboxProcessor
 from eventsourcing.pubsub.in_memory import InMemoryPubSub
@@ -14,7 +15,11 @@ async def test_processor_appends_and_publishes():
     broker = InMemoryPubSub()
     es = InMemoryEventStore()
     ob = InMemoryOutbox()
-    processor = OutboxProcessor(es, ob, broker, dead_stream="dead")
+
+    stop = asyncio.Event()
+    cfg = ESConfig(publisher=broker, subscriber=broker, dead_stream="dead")
+    processor = OutboxProcessor(es, ob, broker, cfg, stop)
+
     # subscribe to stream
     q = await broker.subscribe("s")
     # enqueue one
@@ -23,11 +28,14 @@ async def test_processor_appends_and_publishes():
     # run one iteration
     task = asyncio.create_task(processor.run())
     await asyncio.sleep(0.1)
+
     # event store should contain it
     events = await es.read_stream("s")
     assert events and events[0].name == "P"
+
     # broker queue should have message
     got = await q.get()
     assert got.name == "P"
+
     # clean up
     task.cancel()

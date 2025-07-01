@@ -2,6 +2,7 @@ import asyncio
 
 import pytest
 
+from eventsourcing.config import ESConfig
 from eventsourcing.interfaces import Message
 from eventsourcing.processor import OutboxProcessor
 from eventsourcing.pubsub.in_memory import InMemoryPubSub
@@ -38,7 +39,9 @@ def router(pubsub):
 
 @pytest.fixture
 def processor(event_store, outbox, pubsub):
-    return OutboxProcessor(event_store, outbox, pubsub, dead_stream="dead")
+    stop = asyncio.Event()
+    cfg = ESConfig(publisher=pubsub, subscriber=pubsub, dead_stream="dead")
+    return OutboxProcessor(event_store, outbox, pubsub, cfg, stop)
 
 
 @pytest.fixture(autouse=True)

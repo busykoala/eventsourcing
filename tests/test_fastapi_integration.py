@@ -8,6 +8,7 @@ import pytest
 from fastapi import Depends
 from fastapi import FastAPI
 
+from eventsourcing.config import ESConfig
 from eventsourcing.interfaces import Message
 from eventsourcing.middleware import dedupe_middleware
 from eventsourcing.middleware import logging_middleware
@@ -57,12 +58,13 @@ def fastapi_app():
         # startup
         await broker.subscribe("dead")
         await broker.subscribe("items.events")
+
+        stop = asyncio.Event()
+        cfg = ESConfig(publisher=broker, subscriber=broker, dead_stream="dead")
+        processor = OutboxProcessor(event_store, outbox, broker, cfg, stop)
+
         t1 = asyncio.create_task(router.run())
-        t2 = asyncio.create_task(
-            OutboxProcessor(
-                event_store, outbox, broker, dead_stream="dead"
-            ).run()
-        )
+        t2 = asyncio.create_task(processor.run())
         yield
         # shutdown
         t1.cancel()

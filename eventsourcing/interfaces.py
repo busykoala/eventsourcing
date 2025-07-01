@@ -5,7 +5,6 @@ from typing import Any
 from typing import Awaitable
 from typing import Callable
 from typing import Dict
-from typing import List
 from typing import Optional
 from typing import Protocol
 
@@ -28,10 +27,13 @@ class Message(BaseModel):
 
 
 class HandlerProtocol(Protocol):
-    async def handle(self, message: Message) -> List[Message]: ...
+    async def handle(self, message: Message) -> list[Message]: ...
 
 
 Middleware = Callable[
-    [Message, Callable[[Message], Awaitable[List[Message]]]],
-    Awaitable[List[Message]],
+    [Message, Callable[[Message], Awaitable[list[Message]]]],
+    Awaitable[list[Message]],
 ]
+
+# Alias for clarity
+Messages = list[Message]

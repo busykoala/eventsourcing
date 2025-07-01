@@ -6,6 +6,11 @@ from eventsourcing.store.read_model.base import ReadModelStore
 
 
 class InMemoryReadModelStore(ReadModelStore):
+    """
+    In-memory implementation of ReadModelStore.
+    Not persistent—intended for testing or simple demos.
+    """
+
     def __init__(self) -> None:
         self._data: Dict[str, Any] = {}
 

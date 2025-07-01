@@ -7,6 +7,11 @@ from eventsourcing.store.outbox.base import Outbox
 
 
 class InMemoryOutbox(Outbox):
+    """
+    In-memory implementation of Outbox.
+    Not persistent—intended for testing or simple demos.
+    """
+
     def __init__(self) -> None:
         self._queue: List[Message] = []
         self._failed: List[Message] = []

@@ -2,12 +2,18 @@ from typing import Dict
 from typing import List
 from typing import Optional
 
+from eventsourcing.config import DEFAULT_STREAM
 from eventsourcing.interfaces import Message
 from eventsourcing.log_config import root_logger as logger
 from eventsourcing.store.event_store.base import EventStore
 
 
 class InMemoryEventStore(EventStore):
+    """
+    In-memory implementation of EventStore.
+    Not persistent—intended for testing or simple demos.
+    """
+
     def __init__(self) -> None:
         self._streams: Dict[str, List[Message]] = {}
         self._seen_ids: set[str] = set()
@@ -17,7 +23,7 @@ class InMemoryEventStore(EventStore):
     ) -> None:
         if not msgs:
             return
-        stream = msgs[0].stream or "_default"
+        stream = msgs[0].stream or DEFAULT_STREAM
         seq = self._streams.setdefault(stream, [])
         if expected_version is not None and len(seq) != expected_version:
             msg = f"Version conflict on stream '{stream}'"
