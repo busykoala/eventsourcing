@@ -31,23 +31,25 @@ class EvictList(list[Message]):
 
 class InMemoryPubSub(Publisher, Subscriber):
     """
-    In-memory Pub/Sub implementation. Buffers messages if no subscribers,
+    In-memory Pub/Sub. Buffers messages if no subscribers,
     with a configurable backlog limit and automatic eviction.
+    When someone subscribes, the backlog for that stream is
+    atomically popped and delivered, so it's cleared for the next subscriber.
     """
 
     def __init__(self, backlog_limit: int = 1000) -> None:
         self._streams: Dict[str, List[asyncio.Queue[Optional[Message]]]] = {}
         self._backlog_limit = backlog_limit
         self._backlog: Dict[str, EvictList] = {}
+        self._lock = asyncio.Lock()
 
     async def publish(self, stream: str, *msgs: Message) -> None:
-        try:
+        async with self._lock:
             queues = self._streams.get(stream, [])
             if not queues:
-                buf = self._backlog.get(stream)
-                if buf is None:
-                    buf = EvictList(self._backlog_limit)
-                    self._backlog[stream] = buf
+                buf = self._backlog.setdefault(
+                    stream, EvictList(self._backlog_limit)
+                )
                 buf.extend(msgs)
                 logger.debug("Buffered %d msgs on '%s'", len(msgs), stream)
                 return
@@ -55,29 +57,26 @@ class InMemoryPubSub(Publisher, Subscriber):
                 for m in msgs:
                     await q.put(m)
             logger.info("Published %d msgs to '%s'", len(msgs), stream)
-        except Exception:
-            logger.exception("Error publishing to '%s'", stream)
-            raise
 
     async def subscribe(self, stream: str) -> asyncio.Queue[Optional[Message]]:
-        try:
+        # Atomically pop & flush the backlog on first subscription
+        async with self._lock:
             q: asyncio.Queue[Optional[Message]] = asyncio.Queue()
             self._streams.setdefault(stream, []).append(q)
             pending = self._backlog.pop(stream, EvictList(self._backlog_limit))
             for m in pending:
-                await q.put(m)
-            logger.info(
-                "Subscriber added for '%s', flushed %d buffered msgs",
-                stream,
-                len(pending),
-            )
-            return q
-        except Exception:
-            logger.exception("Error subscribing to '%s'", stream)
-            raise
+                q.put_nowait(m)
+        logger.info(
+            "Subscriber added for '%s', flushed %d buffered msgs",
+            stream,
+            len(pending),
+        )
+        return q
 
     async def close(self) -> None:
-        for queues in self._streams.values():
-            for q in queues:
-                q.put_nowait(None)
+        async with self._lock:
+            for queues in self._streams.values():
+                for q in queues:
+                    q.put_nowait(None)
+            self._streams.clear()
         logger.info("Closed all subscriber queues")

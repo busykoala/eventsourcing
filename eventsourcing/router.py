@@ -25,10 +25,12 @@ class Router:
     ):
         self._subscriber = subscriber
         self.stop_event = stop_event or asyncio.Event()
-        self._routes: Dict[str, HandlerProtocol] = {}
+        self._routes: Dict[str, HandlerProtocol[Message]] = {}
         self._middleware: List[Middleware] = []
 
-    def add_route(self, stream: str, handler: HandlerProtocol) -> None:
+    def add_route(
+        self, stream: str, handler: HandlerProtocol[Message]
+    ) -> None:
         self._routes[stream] = handler
         logger.debug("Route added for '%s'", stream)
 
@@ -36,49 +38,52 @@ class Router:
         self._middleware.append(mw)
         logger.debug("Middleware added: %s", getattr(mw, "__name__", repr(mw)))
 
-    def insert_middleware_before(
-        self, existing: Middleware, new_mw: Middleware
-    ) -> None:
+    async def subscribe_to_streams(self, streams: List[str]) -> None:
         """
-        Insert `new_mw` immediately before `existing` in the middleware pipeline.
+        Public helper to subscribe to multiple streams.
         """
-        idx = self._middleware.index(existing)
-        self._middleware.insert(idx, new_mw)
+        for s in streams:
+            await self._subscriber.subscribe(s)
 
     async def run(self) -> None:
         logger.info("Router starting")
-        queues: Dict[str, asyncio.Queue[Optional[Message]]] = {
+        # subscribe to exactly the configured routes
+        queues = {
             stream: await self._subscriber.subscribe(stream)
             for stream in self._routes
         }
-        try:
-            while not self.stop_event.is_set():
-                for stream, q in queues.items():
-                    msg: Optional[Message] = await q.get()
-                    if msg is None:
-                        logger.info("Shutdown sentinel on '%s'", stream)
-                        return
+        tasks = [
+            asyncio.create_task(self._consume_stream(stream, queue))
+            for stream, queue in queues.items()
+        ]
+        await asyncio.wait(tasks)
+        logger.info("Router stopped")
 
-                    async def final(m: Message) -> list[Message]:
-                        return await self._routes[stream].handle(m)
+    async def _consume_stream(
+        self, stream: str, queue: asyncio.Queue[Optional[Message]]
+    ) -> None:
+        while not self.stop_event.is_set():
+            msg = await queue.get()
+            if msg is None:
+                logger.info("Shutdown sentinel on '%s'", stream)
+                return
+            await self._dispatch(stream, msg)
 
-                    pipeline: Callable[[Message], Awaitable[list[Message]]] = (
-                        final
-                    )
-                    for mw in reversed(self._middleware):
-                        pipeline = self._wrap_middleware(mw, pipeline)
+    async def _dispatch(self, stream: str, msg: Message) -> None:
+        async def final(m: Message) -> List[Message]:
+            return await self._routes[stream].handle(m)
 
-                    await pipeline(msg)
-                await asyncio.sleep(0)
-        finally:
-            logger.info("Router stopped")
+        pipeline: Callable[[Message], Awaitable[List[Message]]] = final
+        for mw in reversed(self._middleware):
+            pipeline = self._wrap_middleware(mw, pipeline)
+        await pipeline(msg)
 
     @staticmethod
     def _wrap_middleware(
         mw: Middleware,
-        next_handler: Callable[[Message], Awaitable[list[Message]]],
-    ) -> Callable[[Message], Awaitable[list[Message]]]:
-        async def wrapped(msg: Message) -> list[Message]:
+        next_handler: Callable[[Message], Awaitable[List[Message]]],
+    ) -> Callable[[Message], Awaitable[List[Message]]]:
+        async def wrapped(msg: Message) -> List[Message]:
             return await mw(msg, next_handler)
 
         return wrapped

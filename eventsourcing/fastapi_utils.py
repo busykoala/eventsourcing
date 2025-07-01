@@ -19,32 +19,30 @@ def lifespan_manager(
     """
     Returns a FastAPI lifespan function that:
     - Shares the same stop_event between router and processor
-    - Subscribes to provided streams on startup
+    - Subscribes to provided streams on startup (via Router API)
     - Starts router.run() and outbox_processor.run() as background tasks
     - On shutdown, signals stop_event, closes the subscriber, and waits for tasks
     """
 
     @asynccontextmanager
     async def _lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
-        # Use the same stop_event for both router and processor
+        # Share the same stop_event
         router.stop_event = outbox_processor.stop_event
 
-        # Subscribe to each stream before starting
-        for s in streams:
-            await router._subscriber.subscribe(s)
+        # Subscribe via public method
+        await router.subscribe_to_streams(streams)
 
-        # Launch both background loops
+        # Launch both loops
         t_router = asyncio.create_task(router.run())
         t_proc = asyncio.create_task(outbox_processor.run())
 
         try:
             yield
         finally:
-            # Signal shutdown
             outbox_processor.stop_event.set()
-            # Close the subscriber so router gets None sentinels
+            # Close the subscriber
             await router._subscriber.close()
-            # Await both loops to exit cleanly
+            # Await both loops
             await t_router
             await t_proc
 
