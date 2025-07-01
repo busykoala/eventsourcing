@@ -1,0 +1,51 @@
+[project]
+name = "eventsourcing"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "pydantic>=2.11.7",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.4.1",
+    "pytest-asyncio>=1.0.0",
+    "mypy>=1.16.1",
+    "poethepoet>=0.35.0",
+    "ruff>=0.12.1",
+    "fastapi>=0.115.14",
+    "httpx>=0.28.1",
+]
+
+[tool.poe.tasks]
+test = { shell = "uv run pytest || exit 1" }
+format = { shell = '''
+uv run ruff format || exit 1
+uv run ruff check --fix || exit 1
+''' }
+types = { shell = "uv run mypy" }
+dev = { shell = "uvicorn main:app --reload" }
+
+[tool.ruff]
+line-length = 79
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "Q", "I"]
+ignore = ["E501"]
+
+[tool.ruff.lint.isort]
+force-single-line = true
+
+[tool.mypy]
+python_version = "3.12"
+files = [
+    "eventsourcing/**/*.py",
+    "main.py"
+]
+ignore_missing_imports = true
+disallow_untyped_defs = true
+check_untyped_defs = true
+warn_unused_ignores = true
+show_error_codes = true

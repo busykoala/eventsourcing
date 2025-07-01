@@ -1,0 +1,48 @@
+from typing import Dict
+from typing import List
+from typing import Optional
+
+from eventsourcing.interfaces import Message
+from eventsourcing.log_config import root_logger as logger
+from eventsourcing.store.event_store.base import EventStore
+
+
+class InMemoryEventStore(EventStore):
+    def __init__(self) -> None:
+        self._streams: Dict[str, List[Message]] = {}
+        self._seen_ids: set[str] = set()
+
+    async def append_to_stream(
+        self, msgs: List[Message], expected_version: Optional[int] = None
+    ) -> None:
+        if not msgs:
+            return
+        stream = msgs[0].stream or "_default"
+        seq = self._streams.setdefault(stream, [])
+        if expected_version is not None and len(seq) != expected_version:
+            msg = f"Version conflict on stream '{stream}'"
+            logger.error(msg)
+            raise RuntimeError(msg)
+        for m in msgs:
+            if m.id in self._seen_ids:
+                continue
+            m.version = len(seq) + 1
+            seq.append(m)
+            self._seen_ids.add(m.id)
+        logger.info("Appended %d msgs to '%s'", len(msgs), stream)
+
+    async def read_stream(
+        self, stream: str, from_version: int = 0
+    ) -> List[Message]:
+        result = [
+            m
+            for m in self._streams.get(stream, [])
+            if m.version > from_version
+        ]
+        logger.debug(
+            "Read %d msgs from '%s' (from_version=%d)",
+            len(result),
+            stream,
+            from_version,
+        )
+        return result
