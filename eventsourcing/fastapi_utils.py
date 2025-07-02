@@ -1,5 +1,6 @@
 import asyncio
 from contextlib import asynccontextmanager
+from typing import Any
 from typing import AsyncContextManager
 from typing import AsyncGenerator
 from typing import Callable
@@ -7,38 +8,42 @@ from typing import List
 
 from fastapi import FastAPI
 
-from eventsourcing.processor import OutboxProcessor
+from eventsourcing.processor.base import OutboxProcessorProtocol
 from eventsourcing.router import Router
 
 
 def lifespan_manager(
     router: Router,
-    outbox_processor: OutboxProcessor,
+    processor: OutboxProcessorProtocol,
     streams: List[str],
 ) -> Callable[[FastAPI], AsyncContextManager[None]]:
     """
     Returns a FastAPI lifespan function that:
       1) Shares the same stop_event between router and processor
       2) Subscribes to provided streams on startup
-      3) Starts router.run() and outbox_processor.run() as background tasks
-      4) On shutdown, invokes router.shutdown() and waits for the processor
+      3) Starts router.run() and processor.run() as background tasks
+      4) On shutdown, signals stop_event and cleans up
     """
 
     @asynccontextmanager
-    async def _lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
-        # share the same stop_event
-        router.stop_event = outbox_processor.stop_event
+    async def _lifespan(app: FastAPI) -> AsyncGenerator[None, Any]:
+        # share stop_event if available
+        if hasattr(processor, "stop_event"):
+            router.stop_event = processor.stop_event
 
-        # subscribe before starting loops
-        await router.subscribe_to_streams(streams)
+        # subscribe once to each stream
+        for s in streams:
+            await router._subscriber.subscribe(s)
 
-        _ = asyncio.create_task(router.run())
-        t_proc = asyncio.create_task(outbox_processor.run())
+        t_router = asyncio.create_task(router.run())
+        t_proc = asyncio.create_task(processor.run())
         try:
             yield
         finally:
-            # clean shutdown of router + then processor
+            if hasattr(processor, "stop_event"):
+                processor.stop_event.set()
             await router.shutdown()
             await t_proc
+            t_router.cancel()
 
     return _lifespan

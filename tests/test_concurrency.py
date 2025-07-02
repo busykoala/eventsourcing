@@ -2,22 +2,18 @@ import asyncio
 
 import pytest
 
-from eventsourcing.interfaces import Message
-from eventsourcing.store.event_store.in_memory import InMemoryEventStore
 
-
+@pytest.mark.parametrize("total,split", [(10, 5), (20, 10), (0, 0), (1, 1)])
 @pytest.mark.asyncio
-async def test_concurrent_appends():
-    store = InMemoryEventStore()
-    msgs = [Message(name=f"E{i}", payload={}, stream="s") for i in range(10)]
+async def test_concurrent_appends(event_store, make_message, total, split):
+    msgs = [make_message(name=f"E{i}", stream="s") for i in range(total)]
 
     async def append_part(part):
-        await store.append_to_stream(part)
+        await event_store.append_to_stream(part)
 
-    # run two coroutines appending interleaved
-    await asyncio.gather(
-        append_part(msgs[:5]),
-        append_part(msgs[5:]),
-    )
-    events = await store.read_stream("s")
-    assert len(events) == 10
+    # Run two coroutines appending interleaved slices
+    await asyncio.gather(append_part(msgs[:split]), append_part(msgs[split:]))
+
+    stored = await event_store.read_stream("s")
+    assert len(stored) == total
+    assert {m.name for m in stored} == {f"E{i}" for i in range(total)}

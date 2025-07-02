@@ -1,6 +1,4 @@
-import json
-from typing import Any
-from typing import cast
+import datetime
 
 import aiosqlite
 
@@ -16,6 +14,7 @@ class SQLiteEventStore(EventStore):
     ):
         self.db_path = db_path
         self._external_connection = connection
+        self._initialized = False
 
     async def _get_connection(self) -> aiosqlite.Connection:
         if self._external_connection:
@@ -23,20 +22,25 @@ class SQLiteEventStore(EventStore):
         return await aiosqlite.connect(self.db_path)
 
     async def _ensure_initialized(self) -> None:
+        if self._initialized:
+            return
         db = await self._get_connection()
         await db.execute(
             """
             CREATE TABLE IF NOT EXISTS events (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                stream TEXT NOT NULL,
+                id TEXT PRIMARY KEY,
                 name TEXT NOT NULL,
-                payload TEXT NOT NULL,
-                headers TEXT NOT NULL,
-                timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+                payload BLOB NOT NULL,
+                stream TEXT NOT NULL,
+                timestamp TEXT NOT NULL,
+                correlation_id TEXT,
+                causation_id TEXT,
+                version INTEGER NOT NULL
             )
             """
         )
         await db.commit()
+        self._initialized = True
 
     async def append(self, stream: str, messages: list[Message]) -> None:
         await self._ensure_initialized()
@@ -45,14 +49,21 @@ class SQLiteEventStore(EventStore):
         for msg in messages:
             await db.execute(
                 """
-                INSERT INTO events (stream, name, payload, headers)
-                VALUES (?, ?, ?, ?)
+                INSERT INTO events (
+                    id, name, payload, stream, timestamp,
+                    correlation_id, causation_id, version
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
-                    stream,
+                    msg.id,
                     msg.name,
-                    self._serialize(msg.payload),
-                    self._serialize(msg.headers),
+                    msg.payload,
+                    stream,
+                    msg.timestamp.isoformat(),
+                    msg.correlation_id,
+                    msg.causation_id,
+                    msg.version,
                 ),
             )
         await db.commit()
@@ -60,12 +71,13 @@ class SQLiteEventStore(EventStore):
     async def read(self, stream: str) -> list[Message]:
         await self._ensure_initialized()
         db = await self._get_connection()
+        db.row_factory = aiosqlite.Row
         cursor = await db.execute(
             """
-            SELECT name, payload, headers
+            SELECT *
             FROM events
             WHERE stream = ?
-            ORDER BY id ASC
+            ORDER BY version ASC
             """,
             (stream,),
         )
@@ -73,17 +85,14 @@ class SQLiteEventStore(EventStore):
         await cursor.close()
         return [
             Message(
-                name=row[0],
-                payload=self._deserialize(row[1]),
-                headers=cast(dict[str, str], self._deserialize(row[2])),
+                id=row["id"],
+                name=row["name"],
+                payload=row["payload"],
+                stream=row["stream"],
+                timestamp=datetime.datetime.fromisoformat(row["timestamp"]),
+                correlation_id=row["correlation_id"],
+                causation_id=row["causation_id"],
+                version=row["version"],
             )
             for row in rows
         ]
-
-    @staticmethod
-    def _serialize(obj: object) -> str:
-        return json.dumps(obj, separators=(",", ":"))
-
-    @staticmethod
-    def _deserialize(s: str) -> Any:
-        return json.loads(s)

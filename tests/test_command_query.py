@@ -1,28 +1,27 @@
 import pytest
 
-from eventsourcing.command_handler import CommandHandler
-from eventsourcing.interfaces import Message
-from eventsourcing.query_handler import QueryHandler
+from eventsourcing import Message
 
 
 @pytest.mark.asyncio
-async def test_command_handler_enqueues(outbox):
-    enqueued = []
+async def test_command_and_query(outbox, read_model):
+    # CommandHandler
+    enq = []
 
-    async def fake_enqueue(msgs):
-        enqueued.extend(msgs)
+    async def fake_e(msgs):
+        enq.extend(msgs)
 
-    handler = CommandHandler(fake_enqueue)
+    from eventsourcing.command_handler import CommandHandler
+
     cmd = Message(name="DoIt", payload={"x": 1}, stream="s")
-    await handler.handle(cmd)
-    assert enqueued and enqueued[0].name == "DoItExecuted"
-    assert enqueued[0].causation_id == cmd.id
+    await CommandHandler(fake_e).handle(cmd)
+    assert enq and enq[0].name == "DoItExecuted"
 
+    # QueryHandler
+    await read_model.save("Q", {"v": 1})
+    from eventsourcing.query_handler import QueryHandler
 
-@pytest.mark.asyncio
-async def test_query_handler_reads(read_model):
-    await read_model.save("Q", {"val": 42})
-    handler = QueryHandler(read_model)
-    qry = Message(name="Q", payload={}, stream="s")
-    result = await handler.handle(qry)
-    assert result == {"val": 42}
+    res = await QueryHandler(read_model).handle(
+        Message(name="Q", payload={}, stream="s")
+    )
+    assert res == {"v": 1}

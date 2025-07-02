@@ -7,7 +7,7 @@ from .middleware import dedupe_middleware
 from .middleware import logging_middleware
 from .middleware import metrics_middleware
 from .middleware import retry_middleware
-from .processor import OutboxProcessor
+from .processor.base import OutboxProcessorProtocol
 
 # Default in-memory implementations
 from .pubsub.in_memory import InMemoryPubSub
@@ -31,7 +31,7 @@ __all__ = [
     "dedupe_middleware",
     "metrics_middleware",
     "Router",
-    "OutboxProcessor",
+    "OutboxProcessorProtocol",
     "CommandHandler",
     "QueryHandler",
 ]

@@ -1,32 +1,22 @@
 import pytest
 
 from eventsourcing.interfaces import Message
-from eventsourcing.pubsub.in_memory import InMemoryPubSub
 
 
 @pytest.mark.asyncio
-async def test_publish_subscribe_single():
-    broker = InMemoryPubSub()
-    q = await broker.subscribe("topic1")
-    m = Message(name="A", payload={"x": 1}, stream="topic1")
-    await broker.publish("topic1", m)
-    got = await q.get()
-    assert got == m
+async def test_publish_subscribe(pubsub):
+    q = await pubsub.subscribe("t1")
+    m = Message(name="A", payload={"x": 1}, stream="t1")
+    await pubsub.publish("t1", m)
+    assert await q.get() == m
 
+    # multiple subscribers
+    q1, q2 = await pubsub.subscribe("t2"), await pubsub.subscribe("t2")
+    m2 = Message(name="B", payload={}, stream="t2")
+    await pubsub.publish("t2", m2)
+    assert await q1.get() == m2 and await q2.get() == m2
 
-@pytest.mark.asyncio
-async def test_multiple_subscribers_get_same():
-    broker = InMemoryPubSub()
-    q1, q2 = await broker.subscribe("t"), await broker.subscribe("t")
-    m = Message(name="B", payload={}, stream="t")
-    await broker.publish("t", m)
-    assert await q1.get() == m
-    assert await q2.get() == m
-
-
-@pytest.mark.asyncio
-async def test_close_puts_none():
-    broker = InMemoryPubSub()
-    q = await broker.subscribe("x")
-    await broker.close()
-    assert await q.get() is None
+    # close
+    q3 = await pubsub.subscribe("t3")
+    await pubsub.close()
+    assert await q3.get() is None

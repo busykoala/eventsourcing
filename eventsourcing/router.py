@@ -9,7 +9,6 @@ from eventsourcing.interfaces import HandlerProtocol
 from eventsourcing.interfaces import Message
 from eventsourcing.interfaces import Middleware
 from eventsourcing.log_config import logger  # use named logger
-from eventsourcing.middleware import deserialization_middleware
 from eventsourcing.pubsub.base import Subscriber
 
 
@@ -26,9 +25,8 @@ class Router:
     ) -> None:
         self._subscriber = subscriber
         self.stop_event = stop_event or asyncio.Event()
-        # always run deserialization first
-        self._middleware: List[Middleware] = [deserialization_middleware]
         self._routes: Dict[str, HandlerProtocol[Message]] = {}
+        self._middleware: List[Middleware] = []
 
     def add_route(
         self, stream: str, handler: HandlerProtocol[Message]

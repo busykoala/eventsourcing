@@ -26,7 +26,8 @@ class InMemoryOutbox(Outbox):
         async with self._lock:
             batch = self._queue[:batch_size]
             self._queue = self._queue[batch_size:]
-        logger.debug("Dequeued %d msgs from outbox", len(batch))
+        if batch:
+            logger.debug("Dequeued %d msgs from outbox", len(batch))
         return batch
 
     async def mark_failed(self, msgs: List[Message], error: Exception) -> None:

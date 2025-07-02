@@ -6,7 +6,7 @@ from eventsourcing.middleware import retry_middleware
 
 
 @pytest.mark.asyncio
-async def test_retry_succeeds_after_failure(monkeypatch):
+async def test_retry_middleware(monkeypatch):
     calls = []
 
     async def flaky(msg):
@@ -15,24 +15,23 @@ async def test_retry_succeeds_after_failure(monkeypatch):
             raise ValueError("fail")
         return []
 
-    msg = Message(name="T", payload={}, stream="s")
-    out = await retry_middleware(msg, flaky, retries=3, backoff=0)
+    out = await retry_middleware(
+        Message(name="T", payload={}, stream="s"), flaky, retries=3, backoff=0
+    )
     assert out == []
     assert len(calls) == 2
 
-
-@pytest.mark.asyncio
-async def test_retry_exhausts():
-    async def always_fail(msg):
-        raise RuntimeError
-
-    msg = Message(name="U", payload={}, stream="s")
     with pytest.raises(RuntimeError):
-        await retry_middleware(msg, always_fail, retries=2, backoff=0)
+        await retry_middleware(
+            Message(name="U", payload={}, stream="s"),
+            lambda m: (_ for _ in ()).throw(RuntimeError()),
+            retries=2,
+            backoff=0,
+        )
 
 
 @pytest.mark.asyncio
-async def test_dedupe_prevents_double(monkeypatch):
+async def test_dedupe_middleware():
     processed = []
 
     async def handler(msg):
@@ -40,8 +39,7 @@ async def test_dedupe_prevents_double(monkeypatch):
         return []
 
     msg = Message(name="V", payload={}, stream="s")
-    # first
-    _ = await dedupe_middleware(msg, handler)
-    out2 = await dedupe_middleware(msg, handler)
+    assert await dedupe_middleware(msg, handler) == []
+    # second time, it's deduped
+    assert await dedupe_middleware(msg, handler) == []
     assert processed == [msg.id]
-    assert out2 == []

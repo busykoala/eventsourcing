@@ -19,25 +19,26 @@ M = TypeVar("M", bound="Message")
 class Message:
     name: str
     payload: Any
+    stream: Optional[str] = None
+    correlation_id: Optional[str] = None
     id: str = field(default_factory=lambda: str(uuid.uuid4()))
-    headers: Dict[str, str] = field(default_factory=dict)
     timestamp: datetime.datetime = field(
         default_factory=lambda: datetime.datetime.now(timezone.utc)
     )
     version: int = 0
-    stream: Optional[str] = None
-    correlation_id: Optional[str] = None
     causation_id: Optional[str] = None
 
     def model_dump(self) -> Dict[str, Any]:
-        """
-        Shallow dump to a dict (faster than asdict deep-copy).
-        """
+        """Shallow dump to a dict (faster than asdict deep-copy)."""
         return self.__dict__
 
     @classmethod
     def model_construct(cls, **data: Any) -> "Message":
         return cls(**data)
+
+    def __hash__(self) -> int:
+        # Allow putting Message in sets/maps by its unique ID
+        return hash(self.id)
 
 
 class HandlerProtocol(Protocol[M]):
@@ -46,11 +47,8 @@ class HandlerProtocol(Protocol[M]):
     async def handle(self, message: M) -> List[M]: ...
 
 
-# Middleware takes a Message + next handler, returns a list of Message
 Middleware = Callable[
     [Message, Callable[[Message], Awaitable[List[Message]]]],
     Awaitable[List[Message]],
 ]
-
-# Alias
 Messages = List[Message]
