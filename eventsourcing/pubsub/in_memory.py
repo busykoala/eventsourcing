@@ -5,7 +5,7 @@ from typing import List
 from typing import Optional
 
 from eventsourcing.interfaces import Message
-from eventsourcing.log_config import root_logger as logger
+from eventsourcing.log_config import logger
 from eventsourcing.pubsub.base import Publisher
 from eventsourcing.pubsub.base import Subscriber
 

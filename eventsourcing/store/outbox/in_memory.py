@@ -2,7 +2,7 @@ import asyncio
 from typing import List
 
 from eventsourcing.interfaces import Message
-from eventsourcing.log_config import root_logger as logger
+from eventsourcing.log_config import logger
 from eventsourcing.store.outbox.base import Outbox
 
 

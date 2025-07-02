@@ -1,7 +1,7 @@
 from typing import Any
 from typing import Dict
 
-from eventsourcing.log_config import root_logger as logger
+from eventsourcing.log_config import logger
 from eventsourcing.store.read_model.base import ReadModelStore
 
 

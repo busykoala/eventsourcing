@@ -1,7 +1,7 @@
 from typing import Any
 
 from eventsourcing.interfaces import Message
-from eventsourcing.log_config import root_logger as logger
+from eventsourcing.log_config import logger
 from eventsourcing.store.read_model.base import ReadModelStore
 
 

@@ -16,9 +16,10 @@ console_handler = logging.StreamHandler()
 listener = logging.handlers.QueueListener(_log_queue, console_handler)
 listener.start()
 
-root_logger = logging.getLogger()
-root_logger.setLevel(logging.INFO)
-root_logger.addHandler(queue_handler)
+# Use a dedicated logger name so we don’t clobber the root or uvicorn
+logger = logging.getLogger("eventsourcing")
+logger.setLevel(logging.DEBUG)
+logger.addHandler(queue_handler)
 
 
 def configure_logging(json_logging: bool = False) -> None:

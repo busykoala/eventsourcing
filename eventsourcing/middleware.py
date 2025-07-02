@@ -5,7 +5,8 @@ from typing import Callable
 
 from eventsourcing.interfaces import Message
 from eventsourcing.interfaces import Messages
-from eventsourcing.log_config import root_logger as logger
+from eventsourcing.log_config import logger
+from eventsourcing.serializers.registry import registry
 from eventsourcing.store.dedupe.base import DedupeStore
 from eventsourcing.store.dedupe.in_memory import InMemoryDedupeStore
 
@@ -69,3 +70,22 @@ async def metrics_middleware(
     duration = time.time() - start
     logger.info("METRICS %s took %.3fs", msg.name, duration)
     return out
+
+
+async def deserialization_middleware(
+    msg: Message,
+    handler: Callable[[Message], Awaitable[Messages]],
+) -> Messages:
+    """
+    Pulls msg.payload (bytes) → Python object via the registry
+    before handing it on.
+    """
+    content_type = msg.headers.get("content-type", "application/json")
+    serializer = registry.get(content_type)
+    # only decode if it really is raw bytes
+    if isinstance(msg.payload, (bytes, bytearray)):
+        try:
+            msg.payload = serializer.deserialize(msg.payload)
+        except Exception:
+            logger.warning("Failed to deserialize %s payload", msg.name)
+    return await handler(msg)

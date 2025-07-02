@@ -18,7 +18,7 @@ M = TypeVar("M", bound="Message")
 @dataclass
 class Message:
     name: str
-    payload: Dict[str, Any]
+    payload: Any
     id: str = field(default_factory=lambda: str(uuid.uuid4()))
     headers: Dict[str, str] = field(default_factory=dict)
     timestamp: datetime.datetime = field(
@@ -33,7 +33,7 @@ class Message:
         """
         Shallow dump to a dict (faster than asdict deep-copy).
         """
-        return dict(self.__dict__)
+        return self.__dict__
 
     @classmethod
     def model_construct(cls, **data: Any) -> "Message":

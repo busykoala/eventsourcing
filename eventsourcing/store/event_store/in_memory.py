@@ -5,7 +5,7 @@ from typing import Optional
 
 from eventsourcing.config import DEFAULT_STREAM
 from eventsourcing.interfaces import Message
-from eventsourcing.log_config import root_logger as logger
+from eventsourcing.log_config import logger
 from eventsourcing.store.event_store.base import EventStore
 
 

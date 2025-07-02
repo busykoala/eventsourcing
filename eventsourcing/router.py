@@ -8,25 +8,27 @@ from typing import Optional
 from eventsourcing.interfaces import HandlerProtocol
 from eventsourcing.interfaces import Message
 from eventsourcing.interfaces import Middleware
-from eventsourcing.log_config import root_logger as logger
+from eventsourcing.log_config import logger  # use named logger
+from eventsourcing.middleware import deserialization_middleware
 from eventsourcing.pubsub.base import Subscriber
 
 
 class Router:
     """
     Routes messages from pub/sub to registered handlers,
-    applying middleware in user-defined order, with clean shutdown.
+    applying middleware (starting with deserialization), with clean shutdown.
     """
 
     def __init__(
         self,
         subscriber: Subscriber,
         stop_event: Optional[asyncio.Event] = None,
-    ):
+    ) -> None:
         self._subscriber = subscriber
         self.stop_event = stop_event or asyncio.Event()
+        # always run deserialization first
+        self._middleware: List[Middleware] = [deserialization_middleware]
         self._routes: Dict[str, HandlerProtocol[Message]] = {}
-        self._middleware: List[Middleware] = []
 
     def add_route(
         self, stream: str, handler: HandlerProtocol[Message]
@@ -39,25 +41,29 @@ class Router:
         logger.debug("Middleware added: %s", getattr(mw, "__name__", repr(mw)))
 
     async def subscribe_to_streams(self, streams: List[str]) -> None:
-        """
-        Public helper to subscribe to multiple streams.
-        """
         for s in streams:
             await self._subscriber.subscribe(s)
 
     async def run(self) -> None:
         logger.info("Router starting")
-        # subscribe to exactly the configured routes
         queues = {
             stream: await self._subscriber.subscribe(stream)
             for stream in self._routes
         }
         tasks = [
-            asyncio.create_task(self._consume_stream(stream, queue))
-            for stream, queue in queues.items()
+            asyncio.create_task(self._consume_stream(stream, q))
+            for stream, q in queues.items()
         ]
         await asyncio.wait(tasks)
         logger.info("Router stopped")
+
+    async def shutdown(self) -> None:
+        """
+        Cleanly shut down: signal stop_event and close subscriber.
+        """
+        self.stop_event.set()
+        await self._subscriber.close()
+        logger.info("Router shutdown complete")
 
     async def _consume_stream(
         self, stream: str, queue: asyncio.Queue[Optional[Message]]
@@ -76,14 +82,15 @@ class Router:
         pipeline: Callable[[Message], Awaitable[List[Message]]] = final
         for mw in reversed(self._middleware):
             pipeline = self._wrap_middleware(mw, pipeline)
+
         await pipeline(msg)
 
     @staticmethod
     def _wrap_middleware(
         mw: Middleware,
-        next_handler: Callable[[Message], Awaitable[List[Message]]],
+        nxt: Callable[[Message], Awaitable[List[Message]]],
     ) -> Callable[[Message], Awaitable[List[Message]]]:
         async def wrapped(msg: Message) -> List[Message]:
-            return await mw(msg, next_handler)
+            return await mw(msg, nxt)
 
         return wrapped
