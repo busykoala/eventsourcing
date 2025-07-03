@@ -12,6 +12,7 @@ dependencies = [
     "fastavro>=1.11.1",
     "aiosqlite>=0.21.0",
     "python-multipart>=0.0.20",
+    "asyncpg>=0.30.0",
 ]
 
 [dependency-groups]

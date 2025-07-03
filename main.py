@@ -1,4 +1,6 @@
 import asyncio
+import base64
+import logging
 from typing import Any
 from typing import Dict
 from typing import List
@@ -24,46 +26,62 @@ from eventsourcing.processor.at_least_once_processor import (
 )
 from eventsourcing.pubsub.in_memory import InMemoryPubSub
 from eventsourcing.router import Router
-from eventsourcing.store.event_store.sqlite import SQLiteEventStore
+from eventsourcing.store.event_store.postgres import PostgresEventStore
 from eventsourcing.store.outbox.in_memory import InMemoryOutbox
+
+# Configure logging level
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("eventsourcing")
+logger.setLevel(logging.INFO)
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 0. Payload models
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-class UploadPrescriptionPayload(BaseModel):
-    data: bytes  # raw file bytes
+class BasePayload(BaseModel):
+    def to_dict(self) -> Dict[str, Any]:
+        serialized = self.model_dump()
+        for key, value in serialized.items():
+            if isinstance(value, bytes):
+                serialized[key] = base64.b64encode(value).decode(
+                    "utf-8"
+                )  # Encode bytes to Base64
+        return serialized
 
 
-class OCRCompletedPayload(BaseModel):
+class UploadPrescriptionPayload(BasePayload):
+    data: bytes
+
+
+class OCRCompletedPayload(BasePayload):
     text: str
 
 
-class Interaction(BaseModel):
+class Interaction(BasePayload):
     pair: List[str]
     severity: str
 
 
-class InteractionAnalysisPayload(BaseModel):
+class InteractionAnalysisPayload(BasePayload):
     interactions: List[Interaction]
 
 
-class Duplicate(BaseModel):
+class Duplicate(BasePayload):
     drug: str
     count: int
 
 
-class DuplicatePrescriptionPayload(BaseModel):
+class DuplicatePrescriptionPayload(BasePayload):
     duplicates: List[Duplicate]
 
 
-class Contraindication(BaseModel):
+class Contraindication(BasePayload):
     drug: str
     issue: str
 
 
-class ContraindicationAnalysisPayload(BaseModel):
+class ContraindicationAnalysisPayload(BasePayload):
     contraindications: List[Contraindication]
 
 
@@ -71,7 +89,9 @@ class ContraindicationAnalysisPayload(BaseModel):
 # 1. Core infrastructure
 # ─────────────────────────────────────────────────────────────────────────────
 
-event_store = SQLiteEventStore(db_path="events.db")
+event_store = PostgresEventStore(
+    dsn="postgresql://postgres:postgres@localhost:5432/eventsourcing"
+)
 outbox = InMemoryOutbox()
 broker = InMemoryPubSub(backlog_limit=1000)
 
