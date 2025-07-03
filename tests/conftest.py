@@ -1,6 +1,9 @@
 import asyncio
 import uuid
 from contextlib import asynccontextmanager
+from typing import Any
+from typing import AsyncGenerator
+from typing import Dict
 
 import pytest
 from fastapi import Depends
@@ -96,8 +99,16 @@ def router(broker):
 
 @pytest.fixture
 def make_message():
-    def _make(name="Test", payload=None, stream="s"):
-        return Message(name=name, payload=payload or {}, stream=stream)
+    def _make(
+        name: str = "Test",
+        payload: Any = None,
+        stream: str = "s",
+    ) -> Message[Dict[str, Any]]:
+        return Message[Dict[str, Any]](
+            name=name,
+            payload=payload or {},
+            stream=stream,
+        )
 
     return _make
 
@@ -120,7 +131,7 @@ def fastapi_app(broker, event_store, outbox, read_model):
         def __init__(self):
             self.calls = 0
 
-        async def handle(self, msg: Message):
+        async def handle(self, msg: Message[Dict[str, Any]]):
             self.calls += 1
             if self.calls == 1:
                 # first failure to trigger retry
@@ -163,12 +174,14 @@ def fastapi_app(broker, event_store, outbox, read_model):
 
     app = FastAPI(lifespan=lifespan)
 
-    async def get_outbox():
-        return outbox
+    async def get_outbox() -> AsyncGenerator[InMemoryOutbox, None]:
+        yield outbox
 
     @app.post("/items/")
-    async def create_item(cmd: dict, ob: InMemoryOutbox = Depends(get_outbox)):
-        msg = Message(
+    async def create_item(
+        cmd: Dict[str, Any], ob: InMemoryOutbox = Depends(get_outbox)
+    ):
+        msg: Message[Dict[str, Any]] = Message[Dict[str, Any]](
             name="ItemCreated",
             payload=cmd,
             stream="items.events",

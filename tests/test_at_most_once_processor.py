@@ -1,4 +1,6 @@
 import asyncio
+from typing import Any
+from typing import Dict
 
 import pytest
 
@@ -19,7 +21,9 @@ async def test_at_most_once_drops_on_publish_error(
     monkeypatch.setattr(broker, "publish", fail_publish)
 
     # enqueue and run
-    await outbox.enqueue([Message(name="E", payload={}, stream="s")])
+    await outbox.enqueue(
+        [Message[Dict[str, Any]](name="E", payload={}, stream="s")]
+    )
     task = asyncio.create_task(processor.run())
     await asyncio.sleep(0.05)
     stop_event.set()

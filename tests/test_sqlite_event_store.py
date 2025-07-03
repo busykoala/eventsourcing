@@ -17,7 +17,9 @@ async def sqlite_store():
 
 @pytest.mark.asyncio
 async def test_sqlite_roundtrip(sqlite_store):
-    msg = Message(name="TestEvent", payload='{"foo": "bar"}')
+    msg: Message[str] = Message[str](
+        name="TestEvent", payload='{"foo": "bar"}'
+    )
     await sqlite_store.append("stream", [msg])
     res = await sqlite_store.read("stream")
     assert len(res) == 1

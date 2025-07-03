@@ -1,3 +1,6 @@
+from typing import Any
+from typing import Dict
+
 import pytest
 
 from eventsourcing.interfaces import Message
@@ -8,7 +11,10 @@ from eventsourcing.store.event_store.in_memory import InMemoryEventStore
 async def test_append_read_and_versioning():
     store = InMemoryEventStore()
     # Append three events
-    events = [Message(name=f"E{i}", payload={}, stream="s") for i in range(3)]
+    events = [
+        Message[Dict[str, Any]](name=f"E{i}", payload={}, stream="s")
+        for i in range(3)
+    ]
     await store.append_to_stream(events, expected_version=0)
 
     got = await store.read_stream("s")
@@ -17,7 +23,8 @@ async def test_append_read_and_versioning():
     # Version conflict
     with pytest.raises(RuntimeError):
         await store.append_to_stream(
-            [Message(name="X", payload={}, stream="s")], expected_version=0
+            [Message[Dict[str, Any]](name="X", payload={}, stream="s")],
+            expected_version=0,
         )
 
     # Deduplication: reusing an existing ID should not increase count
