@@ -32,15 +32,13 @@ class InMemoryEventStore(EventStore):
                 msg = f"Version conflict on stream '{stream}'"
                 logger.error(msg)
                 raise RuntimeError(msg)
-            appended = 0
             for m in msgs:
                 if m.id in self._seen_ids:
                     continue
                 m.version = len(seq) + 1
                 seq.append(m)
                 self._seen_ids.add(m.id)
-                appended += 1
-            logger.info("Appended %d msgs to '%s'", appended, stream)
+            logger.info("Appended %d msgs to '%s'", len(msgs), stream)
 
     async def read_stream(
         self, stream: str, from_version: int = 0

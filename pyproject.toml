@@ -11,6 +11,7 @@ dependencies = [
     "protobuf>=6.31.1",
     "fastavro>=1.11.1",
     "aiosqlite>=0.21.0",
+    "python-multipart>=0.0.20",
 ]
 
 [dependency-groups]
