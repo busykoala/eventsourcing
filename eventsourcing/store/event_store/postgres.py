@@ -89,15 +89,17 @@ class PostgresEventStore(EventStore):
             stream,
             from_version,
         )
+        # Convert UUID fields to strings before creating Message instances
+        # Deserialize the payload field into a dictionary before creating Message instances
         return [
             Message(
-                id=row["id"],
+                id=str(row["id"]),
                 name=row["name"],
-                payload=row["payload"],
+                payload=json.loads(row["payload"]),  # Deserialize JSON payload
                 stream=row["stream"],
                 timestamp=row["timestamp"],
-                correlation_id=row["correlation_id"],
-                causation_id=row["causation_id"],
+                correlation_id=str(row["correlation_id"]),
+                causation_id=str(row["causation_id"]),
                 version=row["version"],
             )
             for row in rows

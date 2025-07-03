@@ -1,16 +1,12 @@
 import asyncio
 import base64
 import logging
-from typing import Any
-from typing import Dict
-from typing import List
+from typing import Any, Dict, List
 from typing import Optional
 
 import uvicorn
-from fastapi import FastAPI
-from fastapi import File
+from fastapi import FastAPI, File, UploadFile
 from fastapi import HTTPException
-from fastapi import UploadFile
 from pydantic import BaseModel
 
 from eventsourcing.config import ESConfig
@@ -44,9 +40,7 @@ class BasePayload(BaseModel):
         serialized = self.model_dump()
         for key, value in serialized.items():
             if isinstance(value, bytes):
-                serialized[key] = base64.b64encode(value).decode(
-                    "utf-8"
-                )  # Encode bytes to Base64
+                serialized[key] = base64.b64encode(value).decode("utf-8")
         return serialized
 
 
@@ -266,61 +260,30 @@ async def upload_prescription(file: UploadFile = File(...)) -> Dict[str, str]:
     }
 
 
-@app.get("/analysis/{correlation_id}")
-async def get_analysis(correlation_id: str) -> Dict[str, Any]:
-    async def fetch(stream: str) -> Optional[Message[Any]]:
+# Update the list_projections function to handle payload as a dictionary
+@app.get("/projections/")
+async def list_projections() -> Dict[str, List[Dict[str, Any]]]:
+    projections = {}
+    streams = [
+        "prescription.ocr",
+        "prescription.analysis.interactions",
+        "prescription.analysis.duplicates",
+        "prescription.analysis.contraindications",
+    ]
+
+    for stream in streams:
         evs = await event_store.read_stream(stream)
-        return next(
-            (e for e in evs if e.correlation_id == correlation_id), None
-        )
+        projections[stream] = [
+            {
+                **ev.payload,  # Use payload directly as a dictionary
+                "id": str(ev.id),
+                "correlation_id": str(ev.correlation_id),
+                "causation_id": str(ev.causation_id),
+            }
+            for ev in evs
+        ]
 
-    # 1. OCR result
-    ocr_ev = await fetch("prescription.ocr")
-    if ocr_ev is None:
-        raise HTTPException(status_code=404, detail="OCR analysis not found")
-
-    raw_ocr = ocr_ev.payload
-    if hasattr(raw_ocr, "text"):
-        ocr_text = raw_ocr.text
-    else:
-        ocr_text = raw_ocr.get("text", "")
-
-    # 2. Interaction analysis
-    inter_ev = await fetch("prescription.analysis.interactions")
-    interactions: List[Any] = []
-    if inter_ev:
-        raw_inter = inter_ev.payload
-        if hasattr(raw_inter, "interactions"):
-            interactions = raw_inter.interactions
-        else:
-            interactions = raw_inter.get("interactions", [])
-
-    # 3. Duplicate detection
-    dup_ev = await fetch("prescription.analysis.duplicates")
-    duplicates: List[Any] = []
-    if dup_ev:
-        raw_dup = dup_ev.payload
-        if hasattr(raw_dup, "duplicates"):
-            duplicates = raw_dup.duplicates
-        else:
-            duplicates = raw_dup.get("duplicates", [])
-
-    # 4. Contraindications
-    contra_ev = await fetch("prescription.analysis.contraindications")
-    contraindications: List[Any] = []
-    if contra_ev:
-        raw_contra = contra_ev.payload
-        if hasattr(raw_contra, "contraindications"):
-            contraindications = raw_contra.contraindications
-        else:
-            contraindications = raw_contra.get("contraindications", [])
-
-    return {
-        "ocr_text": ocr_text,
-        "interactions": interactions,
-        "duplicates": duplicates,
-        "contraindications": contraindications,
-    }
+    return projections
 
 
 if __name__ == "__main__":

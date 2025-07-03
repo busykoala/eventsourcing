@@ -11,6 +11,8 @@ docker compose up -d
 
 ```zsh
 xh --form POST http://127.0.0.1:8000/upload_prescription/ file@image.png
+
+xh --form GET http://127.0.0.1:8000/projections/
 ```
 
 ## Development
